@@ -144,7 +144,8 @@ static void simint_allocate_multi_shellpair_base(int npair, int nprim,
     nprim_arr += 2;
     #endif
 
-    const size_t memsize = dprim_size*nprim_arr + dshell12_size*3 + ishell12_size;
+    size_t memsize = dprim_size*nprim_arr + dshell12_size*3 + ishell12_size;
+    memsize += 64; // Should be sizeof(int) * 5 + sizeof(double), align to 64B
 
     // Allocate one large space.
     // Only allocate if the currently allocated memory is too small
@@ -154,6 +155,9 @@ static void simint_allocate_multi_shellpair_base(int npair, int nprim,
         P->ptr = SIMINT_ALLOC(memsize);
         P->memsize = memsize;
     }
+
+    void *ptr_orig = P->ptr;
+    P->ptr = P->ptr + 64; // sizeof(int) * 5 + sizeof(double); 
 
     int dcount = 0;
     P->x          = P->ptr + dprim_size*(dcount++);
@@ -182,6 +186,8 @@ static void simint_allocate_multi_shellpair_base(int npair, int nprim,
     P->AB_y       = P->ptr + dcount*dprim_size +   dshell12_size;
     P->AB_z       = P->ptr + dcount*dprim_size + 2*dshell12_size;
     P->nprim12    = P->ptr + dcount*dprim_size + 3*dshell12_size;
+
+    P->ptr = ptr_orig;
 }
 
 
@@ -570,10 +576,18 @@ void simint_fill_multi_shellpair2(int npair, struct simint_shell const * AB,
         ij += 2;
     }
 
+    // Copy am1, am2, nprim, nshell12, nshell12_clip and screen_max 
+    // to the head of P->ptr;
+    size_t INT_SIZE = sizeof(int);
+    memcpy(P->ptr + INT_SIZE * 0, &P->am1,           INT_SIZE);
+    memcpy(P->ptr + INT_SIZE * 1, &P->am2,           INT_SIZE);
+    memcpy(P->ptr + INT_SIZE * 2, &P->nprim,         INT_SIZE);
+    memcpy(P->ptr + INT_SIZE * 3, &P->nshell12,      INT_SIZE);
+    memcpy(P->ptr + INT_SIZE * 4, &P->nshell12_clip, INT_SIZE);
+    memcpy(P->ptr + INT_SIZE * 5, &P->screen_max,    sizeof(double));
 
     // If we are screening, sort the primitives within each shell
-    if(screen_method)
-        simint_sort_multi_shellpair(P);
+    if (screen_method) simint_sort_multi_shellpair(P);
 }
 
 
